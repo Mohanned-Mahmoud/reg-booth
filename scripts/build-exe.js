@@ -105,36 +105,43 @@ execSync(`npx @electron/asar pack "${appDir}" "${asarTarget}"`, {
 });
 console.log('Packed app.asar successfully.');
 
-// 4. Create Station Config next to the .exe
-console.log('\n[4/4] Generating station-config.json...');
-const configContent = {
-  url: 'http://localhost:8080/kiosk',
-  kiosk: true,
-  fullscreen: true,
-  printerDeviceName: '',
-  printConfig: {
-    printerDeviceName: '',
-    preset: 'badge-3x4',
-    width: '3.2in',
-    height: '4.4in',
-    orientation: 'portrait',
-    colorMode: 'full-color',
-    accentColor: '#000000',
-    showLanyardHole: true,
-    showLogo: true,
-    showCompany: true,
-    eventName: 'ARTECH • LIVE THE EXPERIENCE',
-    qrSize: 130,
-    fontSizeScale: 'normal'
-  },
-  notes: 'Configure effortlessly via ARTECH-Printer-Setup.exe or edit this file directly.'
-};
-
-fs.writeFileSync(
-  path.join(outputDir, 'station-config.json'),
-  JSON.stringify(configContent, null, 2),
-  'utf8'
-);
+// 4. Create Station Config next to the .exe (preserve if already exists!)
+console.log('\n[4/4] Checking station-config.json...');
+const configDest = path.join(outputDir, 'station-config.json');
+if (!fs.existsSync(configDest)) {
+  const rootConfig = path.join(rootDir, 'station-config.json');
+  if (fs.existsSync(rootConfig)) {
+    fs.copyFileSync(rootConfig, configDest);
+    console.log('Copied station-config.json from root.');
+  } else {
+    const configContent = {
+      url: 'http://localhost:8080/kiosk',
+      kiosk: true,
+      fullscreen: true,
+      printerDeviceName: '',
+      printConfig: {
+        printerDeviceName: '',
+        preset: 'badge-3x4',
+        width: '3.2in',
+        height: '4.4in',
+        orientation: 'portrait',
+        colorMode: 'full-color',
+        accentColor: '#1e3a8a',
+        showLanyardHole: true,
+        showLogo: true,
+        showCompany: true,
+        eventName: 'ARTECH • LIVE THE EXPERIENCE',
+        qrSize: 130,
+        fontSizeScale: 'normal'
+      },
+      notes: 'Configure effortlessly via ARTECH-Printer-Setup.exe or edit this file directly.'
+    };
+    fs.writeFileSync(configDest, JSON.stringify(configContent, null, 2), 'utf8');
+    console.log('Generated default station-config.json.');
+  }
+} else {
+  console.log('Preserved existing station-config.json user settings.');
+}
 
 console.log('\n====================================================');
 console.log(' BUILD SUCCESSFUL!');

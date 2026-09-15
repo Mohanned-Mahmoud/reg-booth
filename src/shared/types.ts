@@ -69,12 +69,12 @@ export interface PrintConfig {
 
 export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   printerDeviceName: '',
-  preset: 'label-4x6',
-  width: '102mm',
-  height: '152mm',
+  preset: 'badge-3x4',
+  width: '3.2in',
+  height: '4.4in',
   orientation: 'portrait',
   colorMode: 'full-color',
-  accentColor: '#000000',
+  accentColor: '#1e3a8a',
   showLanyardHole: true,
   showLogo: true,
   showCompany: true,
@@ -105,16 +105,16 @@ export function sanitizeDimensions(width?: string, height?: string): { width: st
     return { width: `${v1}${unit}`, height: `${v2}${unit}` };
   }
 
-  // Default fallbacks if empty
-  if (!w) w = '102mm';
-  if (!h) h = '152mm';
+  // General fallbacks only if completely empty:
+  if (!w) w = '3.2in';
+  if (!h) h = '4.4in';
 
-  // Normalize plain numbers without unit (e.g. "102" -> "102mm", "4" -> "4in")
+  // Normalize plain numbers without unit (e.g. "80" -> "80mm", "4" -> "4in")
   if (/^\d+(\.\d+)?$/.test(w)) {
     const val = parseFloat(w);
     w = val <= 18 ? `${val}in` : `${val}mm`;
   }
-  if (/^\d+(\.\d+)?$/.test(h)) {
+  if (/^\d+(\.\d+)?$/.test(h) && h !== 'auto') {
     const val = parseFloat(h);
     h = val <= 18 ? `${val}in` : `${val}mm`;
   }

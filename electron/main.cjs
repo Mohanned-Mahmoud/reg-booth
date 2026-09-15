@@ -121,69 +121,54 @@ async function resolvePrinterName(win) {
   return CONFIG.printerDeviceName || '';
 }
 
-function parseDimensionToMicrons(dimStr, fallbackMicrons) {
-  if (!dimStr) return fallbackMicrons;
+function parseDimensionToMicrons(dimStr) {
+  if (!dimStr) return 0;
   const str = String(dimStr).trim().toLowerCase();
-  const multiMatch = str.match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
-  if (multiMatch) {
-    const val = parseFloat(multiMatch[1]);
-    const unit = multiMatch[3] || 'mm';
-    if (unit === 'in') return Math.round(val * 25400);
-    if (unit === 'cm') return Math.round(val * 10000);
-    return Math.round(val * 1000);
-  }
+  if (str === 'auto') return 0;
+
   if (str.endsWith('in')) {
     const val = parseFloat(str);
-    return isNaN(val) ? fallbackMicrons : Math.round(val * 25400);
+    return isNaN(val) ? 0 : Math.round(val * 25400);
   }
   if (str.endsWith('mm')) {
     const val = parseFloat(str);
-    return isNaN(val) ? fallbackMicrons : Math.round(val * 1000);
+    return isNaN(val) ? 0 : Math.round(val * 1000);
   }
   if (str.endsWith('cm')) {
     const val = parseFloat(str);
-    return isNaN(val) ? fallbackMicrons : Math.round(val * 10000);
+    return isNaN(val) ? 0 : Math.round(val * 10000);
+  }
+  if (str.endsWith('px')) {
+    const val = parseFloat(str);
+    return isNaN(val) ? 0 : Math.round((val / 96) * 25400);
   }
   const val = parseFloat(str);
-  return isNaN(val) ? fallbackMicrons : Math.round(val * 1000);
+  if (isNaN(val)) return 0;
+  return val <= 18 ? Math.round(val * 25400) : Math.round(val * 1000);
 }
 
 function resolvePageSize(printConfig) {
   if (!printConfig) return undefined;
-  const preset = printConfig.preset;
-  if (preset === 'label-4x6') {
-    return { width: 101600, height: 152400 }; // Standard 4x6" photo card / label (101.6 x 152.4 mm)
-  }
-  if (preset === 'cr80') {
-    return { width: 85600, height: 53980 }; // Standard CR80 ID Card (85.6 x 54.0 mm)
-  }
-
   const w = printConfig.width;
   const h = printConfig.height;
   if (!w) return undefined;
 
-  let widthMicrons = parseDimensionToMicrons(w, 101600);
-  let heightMicrons = h === 'auto' ? undefined : parseDimensionToMicrons(h, 152400);
+  let widthMicrons = 0;
+  let heightMicrons = 0;
 
-  const match = String(w).match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
+  const match = String(w).match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm|px)?$/);
   if (match) {
     const val1 = parseFloat(match[1]);
     const val2 = parseFloat(match[2]);
     const unit = match[3] || (val1 <= 12 && val2 <= 18 ? 'in' : 'mm');
-    const factor = unit === 'in' ? 25400 : (unit === 'cm' ? 10000 : 1000);
-    widthMicrons = Math.round(val1 * factor);
-    heightMicrons = Math.round(val2 * factor);
+    widthMicrons = parseDimensionToMicrons(`${val1}${unit}`);
+    heightMicrons = parseDimensionToMicrons(`${val2}${unit}`);
+  } else {
+    widthMicrons = parseDimensionToMicrons(w);
+    heightMicrons = h === 'auto' ? 0 : parseDimensionToMicrons(h);
   }
 
-  // If dimensions roughly match 102x152mm or 4x6", align to exact 4x6" DEVMODE (101600 x 152400)
-  if (
-    widthMicrons >= 100000 && widthMicrons <= 104000 &&
-    heightMicrons && heightMicrons >= 150000 && heightMicrons <= 154000
-  ) {
-    return { width: 101600, height: 152400 };
-  }
-
-  if (widthMicrons > 0 && heightMicrons && heightMicrons > 0) {
+  if (widthMicrons > 0 && heightMicrons > 0) {
     return { width: widthMicrons, height: heightMicrons };
   }
   return undefined;
