@@ -57,14 +57,12 @@ export function BadgeCard({
       : 'bg-white text-black border-black font-black';
   } else {
     if (tier === 'vip') {
-      tierStyleClass = 'bg-black text-white border-black shadow-sm';
-    } else if (tier === 'speaker') {
-      tierStyleClass = 'text-white border-transparent';
-      customTierStyle = { backgroundColor: accentColor };
-    } else if (tier === 'press' || tier === 'staff') {
-      tierStyleClass = 'bg-neutral-700 text-white border-neutral-700';
+      tierStyleClass = 'bg-black text-white border-black shadow-sm font-black';
+      customTierStyle = { backgroundColor: '#0f172a' };
     } else {
-      tierStyleClass = 'bg-neutral-100 text-neutral-900 border-neutral-300';
+      // Boldly apply the chosen Event Brand Accent Color to the Access Tier Pill
+      tierStyleClass = 'text-white border-transparent shadow-sm font-black';
+      customTierStyle = { backgroundColor: accentColor };
     }
   }
 
@@ -112,13 +110,18 @@ export function BadgeCard({
         maxWidth: isPrintable ? '100%' : undefined,
         maxHeight: isPrintable ? '100%' : undefined,
         minHeight: isPrintable && config?.height === 'auto' ? 'auto' : undefined,
+        borderColor: isMono ? '#000000' : accentColor,
       }}
     >
-      {/* Top minimal header accent bar */}
+      {/* Top prominent header accent bar */}
       {!isLandscape && (
         <div
-          className="w-full h-1.5 rounded-full -mt-2 mb-2"
-          style={{ backgroundColor: isMono ? '#000000' : accentColor }}
+          className="w-full h-3 rounded-full -mt-1 mb-2.5 shadow-sm"
+          style={{
+            backgroundColor: isMono ? '#000000' : accentColor,
+            WebkitPrintColorAdjust: 'exact',
+            printColorAdjust: 'exact',
+          }}
         />
       )}
 
@@ -163,7 +166,11 @@ export function BadgeCard({
         <div className="mt-2.5 flex justify-center">
           <span
             className={`inline-block rounded-md px-4 py-1 font-mono text-xs font-black uppercase tracking-widest border ${tierStyleClass}`}
-            style={customTierStyle}
+            style={{
+              ...customTierStyle,
+              WebkitPrintColorAdjust: 'exact',
+              printColorAdjust: 'exact',
+            }}
           >
             {attendee.ticketType || 'GENERAL'} ACCESS
           </span>

@@ -203,9 +203,11 @@ async function executeSilentPrint(win, customConfig) {
     logToRenderer(win, `[ARTECH Electron] Using physical page size: ${pageSize.width} x ${pageSize.height} microns`);
   }
 
+  const isColor = pConfig.colorMode !== 'monochrome';
   const options = {
     silent: true,
     printBackground: true,
+    color: isColor,
     deviceName: deviceName || undefined,
     margins: { marginType: 'none' },
     pageSize: pageSize || undefined,
