@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import {
   Printer,
   Sliders,
@@ -19,6 +20,7 @@ import { Link } from 'wouter';
 import { BadgeCard } from '../components/BadgeCard.js';
 import {
   DEFAULT_PRINT_CONFIG,
+  sanitizeDimensions,
   type PrintConfig,
   type BadgePreset,
   type PrintColorMode,
@@ -52,11 +54,11 @@ const PRESET_OPTIONS: Array<{
   },
   {
     id: 'label-4x6',
-    title: 'Large Label (4×6)',
-    badgeSize: '4" × 6"',
-    width: '4in',
-    height: '6in',
-    desc: 'Zebra / Brother desktop thermal shipping & badge rolls',
+    title: 'Large Label / Photo Card (4×6)',
+    badgeSize: '102 × 152 mm (4" × 6")',
+    width: '102mm',
+    height: '152mm',
+    desc: 'Kodak photo card, 4x6 badge paper, or Zebra desktop thermal rolls',
   },
   {
     id: 'roll-80mm',
@@ -138,7 +140,13 @@ export function PrinterSetup() {
         try {
           const cfg = await electron.getStationConfig();
           if (cfg && cfg.printConfig) {
-            setConfig({ ...DEFAULT_PRINT_CONFIG, ...cfg.printConfig });
+            const { width, height } = sanitizeDimensions(cfg.printConfig.width, cfg.printConfig.height);
+            setConfig({
+              ...DEFAULT_PRINT_CONFIG,
+              ...cfg.printConfig,
+              width,
+              height: cfg.printConfig.height === 'auto' ? 'auto' : height,
+            });
           } else if (cfg) {
             setConfig((prev) => ({
               ...prev,
@@ -155,7 +163,13 @@ export function PrinterSetup() {
           if (res.ok) {
             const data = await res.json();
             if (data.printConfig) {
-              setConfig({ ...DEFAULT_PRINT_CONFIG, ...data.printConfig });
+              const { width, height } = sanitizeDimensions(data.printConfig.width, data.printConfig.height);
+              setConfig({
+                ...DEFAULT_PRINT_CONFIG,
+                ...data.printConfig,
+                width,
+                height: data.printConfig.height === 'auto' ? 'auto' : height,
+              });
             }
           }
         } catch (e) {
@@ -196,16 +210,82 @@ export function PrinterSetup() {
     }
   };
 
+  const handleWidthChange = (val: string) => {
+    // Smart detection of "102:152" or "102x152" or "4:6" or "4x6"
+    const match = val.trim().match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
+    if (match) {
+      const v1 = parseFloat(match[1]);
+      const v2 = parseFloat(match[2]);
+      const unit = match[3] || (v1 <= 12 && v2 <= 18 ? 'in' : 'mm');
+      setConfig((prev) => ({
+        ...prev,
+        preset: 'custom',
+        width: `${v1}${unit}`,
+        height: `${v2}${unit}`,
+      }));
+      return;
+    }
+    setConfig((prev) => ({ ...prev, width: val, preset: 'custom' }));
+  };
+
+  const handleHeightChange = (val: string) => {
+    const match = val.trim().match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
+    if (match) {
+      const v1 = parseFloat(match[1]);
+      const v2 = parseFloat(match[2]);
+      const unit = match[3] || (v1 <= 12 && v2 <= 18 ? 'in' : 'mm');
+      setConfig((prev) => ({
+        ...prev,
+        preset: 'custom',
+        width: `${v1}${unit}`,
+        height: `${v2}${unit}`,
+      }));
+      return;
+    }
+    setConfig((prev) => ({ ...prev, height: val, preset: 'custom' }));
+  };
+
+  // Inject dynamic @page size into <head> for accurate paper tray matching
+  useEffect(() => {
+    let styleEl = document.getElementById('badge-page-size-style') as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'badge-page-size-style';
+      document.head.appendChild(styleEl);
+    }
+    const { width: sanitizedW, height: sanitizedH } = sanitizeDimensions(config.width, config.height);
+    const h = config.height === 'auto' ? 'auto' : sanitizedH;
+    styleEl.textContent = `
+      @page {
+        size: ${sanitizedW} ${h};
+        margin: 0mm !important;
+      }
+      @media print {
+        @page {
+          size: ${sanitizedW} ${h};
+          margin: 0mm !important;
+        }
+      }
+    `;
+  }, [config.width, config.height]);
+
   const handleSave = async () => {
     setSaveStatus('saving');
     setStatusMessage('');
+
+    const { width: safeW, height: safeH } = sanitizeDimensions(config.width, config.height);
+    const safeConfig: PrintConfig = {
+      ...config,
+      width: safeW,
+      height: config.height === 'auto' ? 'auto' : safeH,
+    };
 
     const electron = (window as any).electronAPI;
     if (electron && typeof electron.saveStationConfig === 'function') {
       try {
         const res = await electron.saveStationConfig({
-          printerDeviceName: config.printerDeviceName,
-          printConfig: config,
+          printerDeviceName: safeConfig.printerDeviceName,
+          printConfig: safeConfig,
         });
         if (res && res.success) {
           setSaveStatus('saved');
@@ -226,8 +306,8 @@ export function PrinterSetup() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          printerDeviceName: config.printerDeviceName,
-          printConfig: config,
+          printerDeviceName: safeConfig.printerDeviceName,
+          printConfig: safeConfig,
         }),
       });
       if (res.ok) {
@@ -248,12 +328,17 @@ export function PrinterSetup() {
     setTestPrintStatus('printing');
     setStatusMessage('Dispatching sample test badge to printer...');
 
+    const { width: safeW, height: safeH } = sanitizeDimensions(config.width, config.height);
+    const safeConfig: PrintConfig = {
+      ...config,
+      width: safeW,
+      height: config.height === 'auto' ? 'auto' : safeH,
+    };
+
     const electron = (window as any).electronAPI;
     if (electron && typeof electron.testPrint === 'function') {
       try {
-        const result = await electron.testPrint({
-          printerDeviceName: config.printerDeviceName,
-        });
+        const result = await electron.testPrint(safeConfig);
         if (result && result.success) {
           setTestPrintStatus('success');
           setStatusMessage('Test badge printed successfully! Check printer paper tray.');
@@ -478,23 +563,25 @@ export function PrinterSetup() {
             <div className="pt-3 border-t border-white/10 grid grid-cols-3 gap-3">
               <div>
                 <label className="block text-[11px] font-semibold text-stone-400 mb-1">
-                  Width (e.g. 3.2in, 85mm)
+                  Width (e.g. 102mm, 4in)
                 </label>
                 <input
                   type="text"
                   value={config.width}
-                  onChange={(e) => setConfig((prev) => ({ ...prev, width: e.target.value }))}
+                  onChange={(e) => handleWidthChange(e.target.value)}
+                  placeholder="e.g. 102mm or 4in"
                   className="w-full rounded-lg bg-black/40 border border-white/15 px-3 py-1.5 text-xs text-white font-mono focus:border-white/40 focus:outline-none"
                 />
               </div>
               <div>
                 <label className="block text-[11px] font-semibold text-stone-400 mb-1">
-                  Height (e.g. 4.4in, auto)
+                  Height (e.g. 152mm, 6in)
                 </label>
                 <input
                   type="text"
                   value={config.height}
-                  onChange={(e) => setConfig((prev) => ({ ...prev, height: e.target.value }))}
+                  onChange={(e) => handleHeightChange(e.target.value)}
+                  placeholder="e.g. 152mm or 6in"
                   className="w-full rounded-lg bg-black/40 border border-white/15 px-3 py-1.5 text-xs text-white font-mono focus:border-white/40 focus:outline-none"
                 />
               </div>
@@ -813,6 +900,15 @@ export function PrinterSetup() {
           </div>
         </section>
       </main>
+
+      {/* Dedicated Print Portal for @media print (Test Print) */}
+      {typeof document !== 'undefined' &&
+        createPortal(
+          <div id="print-badge-container">
+            <BadgeCard attendee={activeSample} isPrintable={true} config={config} />
+          </div>,
+          document.body
+        )}
     </div>
   );
 }

@@ -1,8 +1,8 @@
 const { contextBridge, ipcRenderer, webFrame } = require('electron');
 
-function sendSilentPrint() {
+function sendSilentPrint(config) {
   console.log('[ARTECH Electron Preload] Sending silent-print IPC to main process');
-  ipcRenderer.send('silent-print');
+  ipcRenderer.send('silent-print', config);
 }
 
 // 1. Expose secure printer and station config APIs to renderer

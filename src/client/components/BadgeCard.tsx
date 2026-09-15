@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import type { Attendee, PrintConfig } from '../../shared/types.js';
+import { sanitizeDimensions, type Attendee, type PrintConfig } from '../../shared/types.js';
 import { generateQrDataUrl } from '../lib/qr-utils.js';
 
 interface BadgeCardProps {
@@ -92,6 +92,8 @@ export function BadgeCard({
       : 'w-[340px] min-h-[480px]';
   }
 
+  const { width: sanitizedWidth, height: sanitizedHeight } = sanitizeDimensions(config?.width, config?.height);
+
   return (
     <div
       className={`badge-card-printable relative flex ${
@@ -103,10 +105,12 @@ export function BadgeCard({
       }`}
       style={{
         boxSizing: 'border-box',
-        width: isPrintable ? (config?.width || '3.2in') : undefined,
+        width: isPrintable ? sanitizedWidth : undefined,
         height: isPrintable
-          ? (config?.height === 'auto' ? undefined : (config?.height || '4.4in'))
+          ? (config?.height === 'auto' ? undefined : sanitizedHeight)
           : undefined,
+        maxWidth: isPrintable ? '100%' : undefined,
+        maxHeight: isPrintable ? '100%' : undefined,
         minHeight: isPrintable && config?.height === 'auto' ? 'auto' : undefined,
       }}
     >

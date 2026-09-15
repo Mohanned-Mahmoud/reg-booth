@@ -69,9 +69,9 @@ export interface PrintConfig {
 
 export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   printerDeviceName: '',
-  preset: 'badge-3x4',
-  width: '3.2in',
-  height: '4.4in',
+  preset: 'label-4x6',
+  width: '102mm',
+  height: '152mm',
   orientation: 'portrait',
   colorMode: 'full-color',
   accentColor: '#000000',
@@ -82,4 +82,43 @@ export const DEFAULT_PRINT_CONFIG: PrintConfig = {
   qrSize: 130,
   fontSizeScale: 'normal',
 };
+
+export function sanitizeDimensions(width?: string, height?: string): { width: string; height: string } {
+  let w = (width || '').trim();
+  let h = (height || '').trim();
+
+  // If width is compound like "102:152mm", "102x152", "4:6", "4x6"
+  const multiMatch = w.match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
+  if (multiMatch) {
+    const v1 = parseFloat(multiMatch[1]);
+    const v2 = parseFloat(multiMatch[2]);
+    const unit = multiMatch[3] || (v1 <= 12 && v2 <= 18 ? 'in' : 'mm');
+    return { width: `${v1}${unit}`, height: `${v2}${unit}` };
+  }
+
+  // If height is compound
+  const hMultiMatch = h.match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
+  if (hMultiMatch) {
+    const v1 = parseFloat(hMultiMatch[1]);
+    const v2 = parseFloat(hMultiMatch[2]);
+    const unit = hMultiMatch[3] || (v1 <= 12 && v2 <= 18 ? 'in' : 'mm');
+    return { width: `${v1}${unit}`, height: `${v2}${unit}` };
+  }
+
+  // Default fallbacks if empty
+  if (!w) w = '102mm';
+  if (!h) h = '152mm';
+
+  // Normalize plain numbers without unit (e.g. "102" -> "102mm", "4" -> "4in")
+  if (/^\d+(\.\d+)?$/.test(w)) {
+    const val = parseFloat(w);
+    w = val <= 18 ? `${val}in` : `${val}mm`;
+  }
+  if (/^\d+(\.\d+)?$/.test(h)) {
+    const val = parseFloat(h);
+    h = val <= 18 ? `${val}in` : `${val}mm`;
+  }
+
+  return { width: w, height: h };
+}
 

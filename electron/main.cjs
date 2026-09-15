@@ -121,18 +121,94 @@ async function resolvePrinterName(win) {
   return CONFIG.printerDeviceName || '';
 }
 
-async function executeSilentPrint(win) {
-  if (!win || win.isDestroyed()) return;
+function parseDimensionToMicrons(dimStr, fallbackMicrons) {
+  if (!dimStr) return fallbackMicrons;
+  const str = String(dimStr).trim().toLowerCase();
+  const multiMatch = str.match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
+  if (multiMatch) {
+    const val = parseFloat(multiMatch[1]);
+    const unit = multiMatch[3] || 'mm';
+    if (unit === 'in') return Math.round(val * 25400);
+    if (unit === 'cm') return Math.round(val * 10000);
+    return Math.round(val * 1000);
+  }
+  if (str.endsWith('in')) {
+    const val = parseFloat(str);
+    return isNaN(val) ? fallbackMicrons : Math.round(val * 25400);
+  }
+  if (str.endsWith('mm')) {
+    const val = parseFloat(str);
+    return isNaN(val) ? fallbackMicrons : Math.round(val * 1000);
+  }
+  if (str.endsWith('cm')) {
+    const val = parseFloat(str);
+    return isNaN(val) ? fallbackMicrons : Math.round(val * 10000);
+  }
+  const val = parseFloat(str);
+  return isNaN(val) ? fallbackMicrons : Math.round(val * 1000);
+}
+
+function resolvePageSize(printConfig) {
+  if (!printConfig) return undefined;
+  const preset = printConfig.preset;
+  if (preset === 'label-4x6') {
+    return { width: 101600, height: 152400 }; // Standard 4x6" photo card / label (101.6 x 152.4 mm)
+  }
+  if (preset === 'cr80') {
+    return { width: 85600, height: 53980 }; // Standard CR80 ID Card (85.6 x 54.0 mm)
+  }
+
+  const w = printConfig.width;
+  const h = printConfig.height;
+  if (!w) return undefined;
+
+  let widthMicrons = parseDimensionToMicrons(w, 101600);
+  let heightMicrons = h === 'auto' ? undefined : parseDimensionToMicrons(h, 152400);
+
+  const match = String(w).match(/^(\d+(?:\.\d+)?)\s*[:xX*]\s*(\d+(?:\.\d+)?)\s*(mm|in|cm)?$/);
+  if (match) {
+    const val1 = parseFloat(match[1]);
+    const val2 = parseFloat(match[2]);
+    const unit = match[3] || (val1 <= 12 && val2 <= 18 ? 'in' : 'mm');
+    const factor = unit === 'in' ? 25400 : (unit === 'cm' ? 10000 : 1000);
+    widthMicrons = Math.round(val1 * factor);
+    heightMicrons = Math.round(val2 * factor);
+  }
+
+  // If dimensions roughly match 102x152mm or 4x6", align to exact 4x6" DEVMODE (101600 x 152400)
+  if (
+    widthMicrons >= 100000 && widthMicrons <= 104000 &&
+    heightMicrons && heightMicrons >= 150000 && heightMicrons <= 154000
+  ) {
+    return { width: 101600, height: 152400 };
+  }
+
+  if (widthMicrons > 0 && heightMicrons && heightMicrons > 0) {
+    return { width: widthMicrons, height: heightMicrons };
+  }
+  return undefined;
+}
+
+async function executeSilentPrint(win, customConfig) {
+  if (!win || win.isDestroyed()) return { success: false, failureReason: 'No window' };
   logToRenderer(win, '[ARTECH Electron] Silent print request received');
 
-  const deviceName = await resolvePrinterName(win);
+  const pConfig = customConfig || (userConfig && userConfig.printConfig) || {};
+  const targetDeviceName = (customConfig && customConfig.printerDeviceName) || CONFIG.printerDeviceName;
+  const deviceName = targetDeviceName || await resolvePrinterName(win);
   logToRenderer(win, `[ARTECH Electron] Target printer: "${deviceName || 'System Default'}"`);
+
+  const pageSize = resolvePageSize(pConfig);
+  if (pageSize) {
+    logToRenderer(win, `[ARTECH Electron] Using physical page size: ${pageSize.width} x ${pageSize.height} microns`);
+  }
 
   const options = {
     silent: true,
     printBackground: true,
     deviceName: deviceName || undefined,
     margins: { marginType: 'none' },
+    pageSize: pageSize || undefined,
   };
 
   const result = await printOnce(win.webContents, options);
@@ -141,14 +217,15 @@ async function executeSilentPrint(win) {
   } else {
     logToRenderer(win, '[ARTECH Electron] Silent print job dispatched successfully!');
   }
+  return result;
 }
 
 function registerIpc() {
   if (ipcRegistered) return;
   ipcRegistered = true;
-  ipcMain.on('silent-print', (event) => {
+  ipcMain.on('silent-print', (event, customConfig) => {
     const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
-    executeSilentPrint(win).catch((err) => {
+    executeSilentPrint(win, customConfig).catch((err) => {
       logToRenderer(win, `[ARTECH Electron] Print crash: ${err?.message || err}`, 'error');
     });
   });
@@ -210,19 +287,7 @@ function registerIpc() {
   ipcMain.handle('test-print', async (event, customConfig) => {
     const win = BrowserWindow.fromWebContents(event.sender) || mainWindow;
     if (!win) return { success: false, failureReason: 'No active window' };
-    try {
-      const targetDevice = (customConfig && customConfig.printerDeviceName) || CONFIG.printerDeviceName;
-      const options = {
-        silent: true,
-        printBackground: true,
-        deviceName: targetDevice || undefined,
-        margins: { marginType: 'none' },
-      };
-      const res = await printOnce(win.webContents, options);
-      return res;
-    } catch (err) {
-      return { success: false, failureReason: err.message || String(err) };
-    }
+    return executeSilentPrint(win, customConfig);
   });
 }
 

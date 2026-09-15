@@ -5,9 +5,9 @@
   "printerDeviceName": "",
   "printConfig": {
     "printerDeviceName": "",
-    "preset": "badge-3x4",
-    "width": "3.2in",
-    "height": "4.4in",
+    "preset": "label-4x6",
+    "width": "102mm",
+    "height": "152mm",
     "orientation": "portrait",
     "colorMode": "full-color",
     "accentColor": "#000000",

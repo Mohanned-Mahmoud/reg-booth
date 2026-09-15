@@ -2,7 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Printer, Download, X, Sparkles, RefreshCw, Check } from 'lucide-react';
 import type { Attendee, PrintConfig } from '../../shared/types.js';
-import { DEFAULT_PRINT_CONFIG } from '../../shared/types.js';
+import { DEFAULT_PRINT_CONFIG, sanitizeDimensions } from '../../shared/types.js';
 import { BadgeCard } from './BadgeCard.js';
 import { downloadAttendeeTicket, generateQrDataUrl } from '../lib/qr-utils.js';
 
@@ -74,13 +74,38 @@ export function PrintBadgeModal({
     }
   }, [attendee?.qrId, isOpen]);
 
+  // Inject dynamic @page size rule so printer driver formats the exact paper dimensions
+  useEffect(() => {
+    if (!isOpen) return;
+    let styleEl = document.getElementById('badge-page-size-style') as HTMLStyleElement | null;
+    if (!styleEl) {
+      styleEl = document.createElement('style');
+      styleEl.id = 'badge-page-size-style';
+      document.head.appendChild(styleEl);
+    }
+    const { width: sanitizedW, height: sanitizedH } = sanitizeDimensions(activeConfig.width, activeConfig.height);
+    const h = activeConfig.height === 'auto' ? 'auto' : sanitizedH;
+    styleEl.textContent = `
+      @page {
+        size: ${sanitizedW} ${h};
+        margin: 0mm !important;
+      }
+      @media print {
+        @page {
+          size: ${sanitizedW} ${h};
+          margin: 0mm !important;
+        }
+      }
+    `;
+  }, [activeConfig.width, activeConfig.height, isOpen]);
+
   if (!isOpen || !attendee) return null;
 
   const handlePrint = () => {
     if (!isQrReady || hasPrinted) return;
     setHasPrinted(true);
     if ((window as any).electronAPI && typeof (window as any).electronAPI.silentPrint === 'function') {
-      (window as any).electronAPI.silentPrint();
+      (window as any).electronAPI.silentPrint(activeConfig);
     } else {
       window.print();
     }
